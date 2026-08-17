@@ -29,3 +29,23 @@ OpenAPI in `contracts/openapi.yaml` is the contract source. Public browser, admi
 REST JSON under `/v1`. Desktop outages must not disable local save editing or local loadout files.
 
 Complete save files, character names, raw equipment bytes and platform offsets are never accepted by the API.
+
+## Moderation boundary
+
+Anonymous reports are accepted with source-based rate limits, but report counts never automatically hide a
+loadout. Before account authentication exists, moderation runs only through an SSH-local administration CLI;
+no unauthenticated remote administration endpoint is permitted. The later Admin UI reuses the same audited
+moderation service.
+
+Text remains plain text and receives basic local term filtering. Paid content-review services, user images and
+attachments are outside the initial scope.
+
+## Authorization boundary
+
+Users have no role by default. Authentication establishes identity; ownership rules allow an authenticated
+user to manage their own resources. Roles and permissions grant only additional capabilities.
+
+The initial reserved role is `super_admin`. Only this role may use the Admin application or `/v1/admin/*`.
+The Go API is the authorization boundary: frontend route guards never replace server-side permission checks.
+The first super administrator is bootstrapped through the SSH-local administration CLI, and the final active
+super administrator cannot be disabled or stripped of that role.

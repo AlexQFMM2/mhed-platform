@@ -7,3 +7,18 @@ body { background: #f3f6fb; }
 .header { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; background: white; border-bottom: 1px solid #e7ebf2; }
 .content { padding: 32px; }
 .metric { margin-top: 10px; color: #172033; font-size: 30px; font-weight: 700; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.page-header h2 { margin: 0; }
+.center-page, .login-page { min-height: 100vh; display: flex; gap: 20px; align-items: center; justify-content: center; flex-direction: column; padding: 24px; }
+.login-page { background: radial-gradient(circle at 20% 15%, #dbeafe, transparent 36%), #f3f6fb; }
+.login-card { width: min(420px, 100%); box-shadow: 0 20px 70px rgba(30, 64, 175, .12); }
+.login-brand { color: #1d4ed8; font-size: 24px; font-weight: 900; letter-spacing: -.03em; }
+.login-brand span { color: #8490a6; font-size: 12px; letter-spacing: .14em; }
+.search-select { position: relative; width: 100%; }
+.search-select .ant-input-suffix .ant-btn { margin: -4px -8px -4px 4px; }
+.search-options { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; max-height: 280px; overflow: auto; padding: 6px; background: white; border: 1px solid #d9d9d9; border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, .16); }
+.search-options > button { width: 100%; display: flex; align-items: flex-start; flex-direction: column; gap: 2px; padding: 8px 10px; color: #172033; text-align: left; background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.search-options > button:hover, .search-options > button:focus { background: #eff6ff; outline: none; }
+.search-options small { color: #8490a6; }
+code { padding: 1px 5px; color: #9f1239; background: #fff1f2; border-radius: 4px; }
+@media (max-width: 900px) { .content { padding: 20px; } .sider { display: none; } }

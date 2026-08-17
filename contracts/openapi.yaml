@@ -1,65 +1,292 @@
 openapi: 3.1.0
 info:
   title: MHED Platform API
-  version: 0.1.0
-  description: API shared by MHED web, administration, and desktop clients.
+  version: 0.2.0
+  description: Public plaza, administration, authentication, and MH3G game-data API.
+servers:
+  - url: /
 paths:
   /health/live:
     get:
       operationId: getLiveHealth
-      tags: [health]
-      responses:
-        "200":
-          description: The process is running.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Health"
+      responses: { "200": { $ref: "#/components/responses/Health" } }
   /health/ready:
     get:
       operationId: getReadyHealth
-      tags: [health]
       responses:
-        "200":
-          description: The process and PostgreSQL are ready.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Health"
-        "503":
-          description: A required dependency is unavailable.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Health"
+        "200": { $ref: "#/components/responses/Health" }
+        "503": { $ref: "#/components/responses/Health" }
   /v1/meta:
     get:
       operationId: getApiMetadata
-      tags: [metadata]
+      responses: { "200": { description: API metadata } }
+  /v1/auth/login:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LoginInput" } } }
       responses:
-        "200":
-          description: API identity and compatibility version.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiMetadata"
+        "200": { description: Session cookie, current user, and CSRF token }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      security: [cookieSession: []]
+      responses:
+        "200": { description: Current user and rotated CSRF token }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/auth/change-password:
+    post:
+      operationId: changePassword
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "200": { description: Password changed and sessions revoked }, "400": { $ref: "#/components/responses/Error" } }
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Session revoked } }
+  /v1/desktop/loadouts:
+    get:
+      operationId: listPublicLoadouts
+      parameters:
+        - { in: query, name: q, schema: { type: string, maxLength: 100 } }
+        - { in: query, name: legal_only, description: When true, return only server-validated legal loadouts., schema: { type: boolean, default: false } }
+        - { in: query, name: equipment, description: "Repeatable AND filter in save_type:save_id form (maximum 8).", schema: { type: array, maxItems: 8, items: { type: string } }, style: form, explode: true }
+        - { in: query, name: active_skill, description: "Repeatable active-skill ID AND filter (maximum 8).", schema: { type: array, maxItems: 8, items: { type: integer } }, style: form, explode: true }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      responses: { "200": { description: Published MH3G loadouts } }
+    post:
+      operationId: publishDesktopLoadout
+      security: [desktopBearer: []]
+      responses:
+        "201": { description: Server-validated loadout published }
+        "409": { description: Identical equipment content already exists }
+  /v1/desktop/auth/login:
+    post:
+      operationId: desktopLogin
+      responses: { "200": { description: Opaque desktop access token and public profile }, "401": { $ref: "#/components/responses/Error" } }
+  /v1/desktop/auth/change-password:
+    post:
+      operationId: desktopChangePassword
+      security: [desktopBearer: []]
+      responses: { "200": { description: Password changed and all sessions revoked } }
+  /v1/desktop/auth/logout:
+    post:
+      operationId: desktopLogout
+      security: [desktopBearer: []]
+      responses: { "204": { description: Desktop session revoked } }
+  /v1/desktop/me:
+    get:
+      operationId: getDesktopProfile
+      security: [desktopBearer: []]
+      responses: { "200": { description: Public ID, nickname, and password-change state; login username is not returned } }
+    patch:
+      operationId: updateDesktopProfile
+      security: [desktopBearer: []]
+      responses: { "200": { description: Nickname updated } }
+  /v1/desktop/me/loadouts:
+    get:
+      operationId: listOwnDesktopLoadouts
+      security: [desktopBearer: []]
+      responses: { "200": { description: Current user's non-deleted loadouts } }
+  /v1/desktop/loadouts/{id}:
+    get:
+      operationId: getPublicLoadout
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }]
+      responses: { "200": { description: Published canonical loadout }, "404": { $ref: "#/components/responses/Error" } }
+    delete:
+      operationId: deleteOwnDesktopLoadout
+      security: [desktopBearer: []]
+      responses: { "204": { description: Own loadout soft deleted }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/desktop/loadouts/{id}/likes:
+    post:
+      operationId: likeDesktopLoadout
+      security: [desktopBearer: []]
+      responses: { "204": { description: Liked; idempotent } }
+    delete:
+      operationId: unlikeDesktopLoadout
+      security: [desktopBearer: []]
+      responses: { "204": { description: Like removed; idempotent } }
+  /v1/desktop/loadouts/{id}/reports:
+    post:
+      operationId: reportLoadout
+      security: [desktopBearer: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }]
+      responses: { "201": { description: Report accepted }, "409": { $ref: "#/components/responses/Error" }, "429": { $ref: "#/components/responses/Error" } }
+  /v1/admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      security: [cookieSession: []]
+      responses: { "200": { description: Administration counters }, "403": { $ref: "#/components/responses/Error" } }
+  /v1/admin/users:
+    get:
+      operationId: listUsers
+      security: [cookieSession: []]
+      responses: { "200": { description: User list } }
+    post:
+      operationId: createUser
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "201": { description: User and one-time temporary password }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/admin/users/{id}/status:
+    patch:
+      operationId: updateUserStatus
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Status updated }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/admin/users/{id}/reset-password:
+    post:
+      operationId: resetUserPassword
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "200": { description: One-time temporary password } }
+  /v1/admin/users/{id}/roles:
+    put:
+      operationId: replaceUserRoles
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Role assignments replaced } }
+  /v1/admin/roles:
+    get:
+      operationId: listRoles
+      security: [cookieSession: []]
+      responses: { "200": { description: Roles and permission keys } }
+    post:
+      operationId: createRole
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "201": { description: Role created } }
+  /v1/admin/roles/{id}:
+    put:
+      operationId: updateRole
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Role updated } }
+    delete:
+      operationId: deleteRole
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Role deleted }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/admin/permissions:
+    get:
+      operationId: listPermissions
+      security: [cookieSession: []]
+      responses: { "200": { description: Fixed permission catalog } }
+  /v1/admin/loadouts:
+    get:
+      operationId: listAdminLoadouts
+      security: [cookieSession: []]
+      responses: { "200": { description: All loadout states } }
+    post:
+      operationId: createAdminLoadout
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "201": { description: Canonical loadout created }, "400": { $ref: "#/components/responses/Error" } }
+  /v1/admin/loadouts/preview:
+    post:
+      operationId: previewAdminLoadout
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "200": { description: Server-derived summary and advisory diagnostics } }
+  /v1/admin/loadouts/{id}:
+    get:
+      operationId: getAdminLoadout
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }]
+      responses: { "200": { description: Loadout including canonical payload } }
+    put:
+      operationId: updateAdminLoadout
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Loadout updated } }
+  /v1/admin/loadouts/{id}/status:
+    patch:
+      operationId: updateAdminLoadoutStatus
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Loadout published, hidden, or soft deleted } }
+  /v1/admin/reports:
+    get:
+      operationId: listReports
+      security: [cookieSession: []]
+      responses: { "200": { description: Report evidence and state } }
+  /v1/admin/reports/{id}/resolve:
+    post:
+      operationId: resolveReport
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/ResourceID" }, { $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "204": { description: Report resolved or dismissed with optional loadout action } }
+  /v1/admin/audit-logs:
+    get:
+      operationId: listAuditLogs
+      security: [cookieSession: []]
+      responses: { "200": { description: Read-only administration audit log } }
+  /v1/admin/game-data/mh3g/meta:
+    get:
+      operationId: getMH3GMetadata
+      security: [cookieSession: []]
+      responses: { "200": { description: Current schema and data version } }
+  /v1/admin/game-data/mh3g/equipment:
+    get:
+      operationId: searchMH3GEquipment
+      security: [cookieSession: []]
+      parameters:
+        - { in: query, name: slot, required: true, schema: { type: string, enum: [weapon, head, chest, arms, waist, legs] } }
+        - { in: query, name: q, schema: { type: string, maxLength: 100 } }
+      responses: { "200": { description: Searchable equipment candidates with real IDs } }
+  /v1/admin/game-data/mh3g/decorations:
+    get:
+      operationId: searchMH3GDecorations
+      security: [cookieSession: []]
+      responses: { "200": { description: Searchable decoration candidates } }
+  /v1/admin/game-data/mh3g/skills:
+    get:
+      operationId: searchMH3GSkills
+      security: [cookieSession: []]
+      responses: { "200": { description: Searchable skill-tree candidates } }
+  /v1/admin/game-data/mh3g/charm-classes:
+    get:
+      operationId: listMH3GCharmClasses
+      security: [cookieSession: []]
+      responses: { "200": { description: Charm classes } }
+  /v1/admin/game-data/mh3g/charm-rules:
+    get:
+      operationId: getMH3GCharmRules
+      security: [cookieSession: []]
+      responses: { "200": { description: Exact native slot and skill-point sets } }
 components:
-  schemas:
+  securitySchemes:
+    cookieSession: { type: apiKey, in: cookie, name: mhed_admin_session }
+    desktopBearer: { type: http, scheme: bearer, bearerFormat: opaque }
+  parameters:
+    ResourceID: { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    CSRFToken: { in: header, name: X-CSRF-Token, required: true, schema: { type: string } }
+  responses:
     Health:
+      description: Health status
+      content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string } } } } }
+    Error:
+      description: Stable API error
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  schemas:
+    LoginInput:
       type: object
       additionalProperties: false
-      required: [status]
+      required: [username, password]
       properties:
-        status:
-          type: string
-    ApiMetadata:
+        username: { type: string, pattern: "^[A-Za-z0-9_]{3,32}$" }
+        password: { type: string, minLength: 12, maxLength: 128 }
+    ErrorEnvelope:
       type: object
-      additionalProperties: false
-      required: [service, api_version]
+      required: [error]
       properties:
-        service:
-          type: string
-          const: mhed-api
-        api_version:
-          type: string
-          const: v1
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }

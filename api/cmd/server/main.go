@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlexQFMM2/mhed-platform/api/internal/config"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/database"
+	"github.com/AlexQFMM2/mhed-platform/api/internal/game/mh3g"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/httpapi"
 )
 
@@ -42,10 +43,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	gameData, gameDataError := mh3g.Open(cfg.GameDataPath, cfg.GameManifestPath)
+	if gameDataError != nil {
+		logger.Error("MH3G game data unavailable", "error", gameDataError)
+	} else {
+		defer gameData.Close()
+	}
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(logger, pool),
+		Handler:           httpapi.NewRouter(logger, pool, httpapi.WithConfig(cfg), httpapi.WithGameData(gameData, gameDataError)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

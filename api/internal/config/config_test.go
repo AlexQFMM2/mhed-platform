@@ -33,3 +33,29 @@ func TestLoadAcceptsPostgresEnvironment(t *testing.T) {
 		t.Fatalf("Load rejected PostgreSQL environment variables: %v", err)
 	}
 }
+
+func TestProductionRejectsUnsafeSettings(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("PGHOST", "db")
+	t.Setenv("MHED_ADMIN_ORIGIN", "http://admin.example.test")
+	t.Setenv("MHED_COOKIE_SECURE", "false")
+	t.Setenv("MHED_REPORT_HMAC_KEY", developmentReportHMACKey)
+	if _, err := Load(); err == nil {
+		t.Fatal("production configuration accepted unsafe defaults")
+	}
+}
+
+func TestProductionAcceptsSecureSettings(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("PGHOST", "db")
+	t.Setenv("MHED_ADMIN_ORIGIN", "https://mhed.admin.65h26i.top")
+	t.Setenv("MHED_COOKIE_SECURE", "true")
+	t.Setenv("MHED_REPORT_HMAC_KEY", "0123456789abcdef0123456789abcdef")
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("secure production configuration was rejected: %v", err)
+	}
+	if !config.CookieSecure {
+		t.Fatal("secure cookie setting was not retained")
+	}
+}

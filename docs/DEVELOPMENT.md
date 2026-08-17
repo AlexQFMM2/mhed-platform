@@ -10,6 +10,12 @@
 
 ```bash
 cp .env.example .env
+cd api
+go run ./cmd/mhedctl import-game-data \
+  --source ../../mh3u-se/data/mh3g.sqlite \
+  --manifest ../../mh3u-se/data/manifest.json \
+  --destination ../game-data/runtime
+cd ..
 pnpm install
 pnpm check
 pnpm build
@@ -20,5 +26,6 @@ docker compose up --build
 Do not commit `.env`, generated credentials, database volumes or production game-data files. Database changes
 must use append-only migrations. Update OpenAPI in the same change as an externally visible handler.
 
-The account and loadout schema is intentionally absent from the initial scaffold. Add it only after the v1
-authentication and `MH_LOADOUT` contracts are reviewed.
+The initial account, RBAC, session, loadout, report, and audit schema is applied by the one-shot Compose
+`migrate` service. Applied Goose migrations are immutable. Runtime game data and generated credentials remain
+outside Git.

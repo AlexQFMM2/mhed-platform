@@ -10,3 +10,7 @@ coverage/
 api/bin/
 api/server
 web/.astro/
+test-password
+test-user-password
+production-password
+game-data/runtime/

@@ -1,6 +1,9 @@
 .git
 .github
 .env
+test-password
+game-data/runtime
+api/bin
 **/node_modules
 **/dist
 **/.astro

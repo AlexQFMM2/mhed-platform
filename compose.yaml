@@ -1,7 +1,14 @@
 name: mhed
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
 services:
   db:
+    container_name: mhed-db
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-mhed}
@@ -29,10 +36,13 @@ services:
     pids_limit: 128
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
     networks:
       - backend
 
   api:
+    container_name: mhed-api
+    image: mhed-api:local
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -47,9 +57,16 @@ services:
       PGUSER: ${POSTGRES_USER:-mhed}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGSSLMODE: disable
+      MHED_GAME_DATA_PATH: /game-data/mh3g.sqlite
+      MHED_GAME_MANIFEST_PATH: /game-data/manifest.json
+      MHED_ADMIN_ORIGIN: ${MHED_ADMIN_ORIGIN:-http://127.0.0.1:18102}
+      MHED_COOKIE_SECURE: ${MHED_COOKIE_SECURE:-false}
+      MHED_REPORT_HMAC_KEY: ${MHED_REPORT_HMAC_KEY:-development-only-report-key-change-me}
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - 127.0.0.1:${MHED_API_PORT:-18100}:8080
     healthcheck:
@@ -63,15 +80,54 @@ services:
     mem_limit: 256m
     pids_limit: 128
     read_only: true
+    volumes:
+      - mhed-game-data:/game-data:ro
     tmpfs:
       - /tmp:size=16m,mode=1777
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
     networks:
       - edge
       - backend
 
+  migrate:
+    container_name: mhed-migrate
+    image: mhed-api:local
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    entrypoint: ["/mhedctl", "migrate", "up"]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-mhed}
+      PGUSER: ${POSTGRES_USER:-mhed}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGSSLMODE: disable
+      MHED_ADMIN_ORIGIN: ${MHED_ADMIN_ORIGIN:-http://127.0.0.1:18102}
+      MHED_COOKIE_SECURE: ${MHED_COOKIE_SECURE:-false}
+      MHED_REPORT_HMAC_KEY: ${MHED_REPORT_HMAC_KEY:-development-only-report-key-change-me}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    cpus: 0.20
+    mem_limit: 128m
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    networks:
+      - backend
+
   front:
+    container_name: mhed-front
+    image: mhed-front:local
     build:
       context: .
       dockerfile: deploy/front/Dockerfile
@@ -84,6 +140,9 @@ services:
       timeout: 3s
       retries: 3
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
     cpus: 0.10
     mem_limit: 64m
     pids_limit: 64
@@ -94,11 +153,74 @@ services:
       - /tmp:size=8m
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
     networks:
       - edge
 
+  game-data-import:
+    container_name: mhed-game-data-import
+    image: mhed-api:local
+    profiles: [ops]
+    entrypoint: ["/mhedctl"]
+    command: ["import-game-data", "--source", "/source/mh3g.sqlite", "--manifest", "/source/manifest.json", "--destination", "/game-data"]
+    user: "0:0"
+    volumes:
+      - ./game-data/runtime:/source:ro
+      - mhed-game-data:/game-data
+    restart: "no"
+    cpus: 0.10
+    mem_limit: 32m
+    pids_limit: 32
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  backup:
+    container_name: mhed-backup
+    image: postgres:17-alpine
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-mhed}
+      PGUSER: ${POSTGRES_USER:-mhed}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        while true; do
+          umask 077
+          stamp=$$(date -u +%Y%m%dT%H%M%SZ)
+          pg_dump --format=custom --file="/backups/mhed-$${stamp}.dump.tmp"
+          mv "/backups/mhed-$${stamp}.dump.tmp" "/backups/mhed-$${stamp}.dump"
+          find /backups -type f -name 'mhed-*.dump' -mtime +7 -delete
+          sleep 86400
+        done
+    volumes:
+      - mhed-backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    cpus: 0.05
+    mem_limit: 64m
+    pids_limit: 32
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    networks:
+      - backend
+
 volumes:
   mhed-postgres:
+    name: mhed-postgres
+  mhed-game-data:
+    name: mhed-game-data
+  mhed-backups:
+    name: mhed-backups
 
 networks:
   edge:
