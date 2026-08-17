@@ -77,13 +77,13 @@ func main() {
 
 func healthcheck(port string) error {
 	client := &http.Client{Timeout: 2 * time.Second}
-	response, err := client.Get("http://127.0.0.1:" + port + "/health/live")
+	response, err := client.Get("http://127.0.0.1:" + port + "/health/ready")
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return errors.New("live endpoint returned a non-200 response")
+		return errors.New("ready endpoint returned a non-200 response")
 	}
 	return nil
 }

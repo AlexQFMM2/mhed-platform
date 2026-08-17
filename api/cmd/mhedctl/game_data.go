@@ -74,13 +74,16 @@ func copyVerifiedGameData(source, manifestPath, destination string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Chmod(temporaryName, 0o640); err != nil {
+	if err := os.Chmod(temporaryName, 0o644); err != nil {
 		return err
 	}
 	if err := os.Rename(temporaryName, filepath.Join(destination, "mh3g.sqlite")); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(destination, "manifest.json"), manifestBytes, 0o640); err != nil {
+		return err
+	}
+	if err := os.Chmod(filepath.Join(destination, "manifest.json"), 0o644); err != nil {
 		return err
 	}
 	return nil
