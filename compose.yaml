@@ -1,0 +1,106 @@
+name: mhed
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mhed}
+      POSTGRES_USER: ${POSTGRES_USER:-mhed}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=30
+    volumes:
+      - mhed-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    cpus: 0.35
+    mem_limit: 384m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: "8080"
+      GOMEMLIMIT: 192MiB
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-mhed}
+      PGUSER: ${POSTGRES_USER:-mhed}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGSSLMODE: disable
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${MHED_API_PORT:-18100}:8080
+    healthcheck:
+      test: ["CMD", "/mhed-api", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    cpus: 0.50
+    mem_limit: 256m
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+      - backend
+
+  front:
+    build:
+      context: .
+      dockerfile: deploy/front/Dockerfile
+    ports:
+      - 127.0.0.1:${MHED_WEB_PORT:-18101}:8080
+      - 127.0.0.1:${MHED_ADMIN_PORT:-18102}:8081
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+    cpus: 0.10
+    mem_limit: 64m
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=8m
+      - /var/run:size=1m
+      - /tmp:size=8m
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+volumes:
+  mhed-postgres:
+
+networks:
+  edge:
+  backend:
+    internal: true

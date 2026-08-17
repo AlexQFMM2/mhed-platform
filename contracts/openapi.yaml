@@ -1,0 +1,65 @@
+openapi: 3.1.0
+info:
+  title: MHED Platform API
+  version: 0.1.0
+  description: API shared by MHED web, administration, and desktop clients.
+paths:
+  /health/live:
+    get:
+      operationId: getLiveHealth
+      tags: [health]
+      responses:
+        "200":
+          description: The process is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /health/ready:
+    get:
+      operationId: getReadyHealth
+      tags: [health]
+      responses:
+        "200":
+          description: The process and PostgreSQL are ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: A required dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/meta:
+    get:
+      operationId: getApiMetadata
+      tags: [metadata]
+      responses:
+        "200":
+          description: API identity and compatibility version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiMetadata"
+components:
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+    ApiMetadata:
+      type: object
+      additionalProperties: false
+      required: [service, api_version]
+      properties:
+        service:
+          type: string
+          const: mhed-api
+        api_version:
+          type: string
+          const: v1

@@ -1,0 +1,12 @@
+.env
+.DS_Store
+.idea/
+.vscode/
+node_modules/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+api/bin/
+api/server
+web/.astro/

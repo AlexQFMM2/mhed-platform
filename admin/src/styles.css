@@ -1,0 +1,9 @@
+html, body, #root { min-height: 100%; margin: 0; }
+body { background: #f3f6fb; }
+.shell { min-height: 100vh; }
+.sider { border-right: 1px solid #e7ebf2; }
+.brand { height: 64px; display: flex; align-items: center; padding: 0 24px; color: #1d4ed8; font-size: 20px; font-weight: 800; }
+.brand span { margin-left: 8px; color: #8490a6; font-size: 11px; letter-spacing: .12em; }
+.header { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; background: white; border-bottom: 1px solid #e7ebf2; }
+.content { padding: 32px; }
+.metric { margin-top: 10px; color: #172033; font-size: 30px; font-weight: 700; }

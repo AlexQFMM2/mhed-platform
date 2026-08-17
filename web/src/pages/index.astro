@@ -1,0 +1,50 @@
+---
+const supportedGames = ["MH3G / MH3U", "MH4G（规划中）", "MHGU / MHXX（规划中）"];
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content="MHED 存档修改器与配装分享平台" />
+    <title>MHED · 怪物猎人存档修改器</title>
+    <style>
+      :root { color-scheme: light; font-family: Inter, "Noto Sans SC", system-ui, sans-serif; color: #172033; background: #f4f7fb; }
+      body { margin: 0; }
+      main { max-width: 960px; margin: 0 auto; padding: 72px 24px; }
+      .eyebrow { color: #2563eb; font-weight: 700; letter-spacing: .08em; }
+      h1 { margin: 12px 0 18px; font-size: clamp(2.4rem, 7vw, 4.8rem); line-height: 1.05; }
+      .lead { max-width: 680px; color: #526078; font-size: 1.15rem; line-height: 1.8; }
+      .actions { display: flex; gap: 12px; margin: 32px 0 52px; flex-wrap: wrap; }
+      .button { padding: 12px 20px; border-radius: 10px; text-decoration: none; font-weight: 700; background: #2563eb; color: white; }
+      .button.secondary { color: #2563eb; background: #e8f0ff; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+      .card { border: 1px solid #dde5f1; border-radius: 14px; padding: 20px; background: white; box-shadow: 0 8px 30px rgb(44 62 96 / 7%); }
+      .card p { color: #65728a; margin-bottom: 0; }
+      footer { margin-top: 64px; color: #768299; font-size: .9rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">MHED PLATFORM</div>
+      <h1>存档留在本地，<br />配装自由分享。</h1>
+      <p class="lead">
+        MHED 提供怪物猎人存档修改与在线配装分享。平台只交换标准化配装数据，
+        不上传完整存档、角色信息或原始装备字节。
+      </p>
+      <div class="actions">
+        <a class="button" href="#downloads">下载修改器</a>
+        <a class="button secondary" href="#games">支持范围</a>
+      </div>
+      <section id="games" class="grid">
+        {supportedGames.map((game) => <article class="card"><strong>{game}</strong><p>独立游戏数据与安全写入规则。</p></article>)}
+      </section>
+      <section id="downloads" class="card" style="margin-top: 16px">
+        <strong>测试阶段</strong>
+        <p>正式下载链接将在 Windows 构建与实机验收完成后发布。</p>
+      </section>
+      <footer>MHED 与 Capcom 无关联。使用前请备份完整存档目录。</footer>
+    </main>
+  </body>
+</html>

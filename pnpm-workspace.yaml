@@ -1,0 +1,7 @@
+packages:
+  - web
+  - admin
+
+allowBuilds:
+  esbuild: true
+  sharp: true
