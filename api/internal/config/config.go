@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/url"
@@ -11,15 +12,16 @@ import (
 const developmentReportHMACKey = "development-only-report-key-change-me"
 
 type Config struct {
-	Environment      string
-	LogLevel         slog.Level
-	Port             string
-	DatabaseURL      string
-	GameDataPath     string
-	GameManifestPath string
-	CookieSecure     bool
-	AdminOrigin      string
-	ReportHMACKey    string
+	Environment         string
+	LogLevel            slog.Level
+	Port                string
+	DatabaseURL         string
+	GameDataPath        string
+	GameManifestPath    string
+	CookieSecure        bool
+	AdminOrigin         string
+	ReportHMACKey       string
+	SecretEncryptionKey []byte
 }
 
 func Load() (Config, error) {
@@ -33,11 +35,28 @@ func Load() (Config, error) {
 		ReportHMACKey:    valueOrDefault("MHED_REPORT_HMAC_KEY", developmentReportHMACKey),
 	}
 	config.CookieSecure = strings.EqualFold(valueOrDefault("MHED_COOKIE_SECURE", "false"), "true")
+	masterValue := strings.TrimSpace(os.Getenv("MHED_SECRET_ENCRYPTION_KEY"))
+	if masterValue == "" && !strings.EqualFold(config.Environment, "production") {
+		masterValue = base64.RawStdEncoding.EncodeToString([]byte("mhed-development-email-key-v1!!!"))
+	}
+	if masterValue != "" {
+		decoded, err := base64.RawStdEncoding.DecodeString(masterValue)
+		if err != nil {
+			decoded, err = base64.StdEncoding.DecodeString(masterValue)
+		}
+		if err != nil || len(decoded) != 32 {
+			return Config{}, errors.New("MHED_SECRET_ENCRYPTION_KEY must be base64-encoded 32 bytes")
+		}
+		config.SecretEncryptionKey = decoded
+	}
 
 	if config.DatabaseURL == "" && strings.TrimSpace(os.Getenv("PGHOST")) == "" {
 		return Config{}, errors.New("DATABASE_URL or PostgreSQL PG* variables are required")
 	}
 	if strings.EqualFold(config.Environment, "production") {
+		if len(config.SecretEncryptionKey) != 32 {
+			return Config{}, errors.New("MHED_SECRET_ENCRYPTION_KEY is required in production")
+		}
 		if !config.CookieSecure {
 			return Config{}, errors.New("MHED_COOKIE_SECURE must be true in production")
 		}

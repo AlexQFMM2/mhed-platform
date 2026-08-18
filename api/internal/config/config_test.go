@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"encoding/base64"
+	"testing"
+)
 
 func TestLoadRequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
@@ -51,6 +54,7 @@ func TestProductionAcceptsSecureSettings(t *testing.T) {
 	t.Setenv("MHED_ADMIN_ORIGIN", "https://mhed.admin.65h26i.top")
 	t.Setenv("MHED_COOKIE_SECURE", "true")
 	t.Setenv("MHED_REPORT_HMAC_KEY", "0123456789abcdef0123456789abcdef")
+	t.Setenv("MHED_SECRET_ENCRYPTION_KEY", base64.RawStdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")))
 	config, err := Load()
 	if err != nil {
 		t.Fatalf("secure production configuration was rejected: %v", err)

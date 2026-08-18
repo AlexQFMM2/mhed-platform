@@ -1,4 +1,4 @@
-export type User = { id: string; public_id:number; nickname:string; username: string; email?: string | null; status: string; must_change_password: boolean; roles: string[]; created_at?: string; last_login_at?: string | null };
+export type User = { id: string; public_id:number; nickname:string; username: string; email?: string | null; email_verified?:boolean; status: string; must_change_password: boolean; roles: string[]; created_at?: string; last_login_at?: string | null };
 export type Role = { id: string; key: string; name: string; description: string; is_system: boolean; permissions: string[]; member_count: number };
 export type Permission = { id: string; key: string; name: string; description: string };
 export type Candidate = { save_type?: number; save_id: number; name: string; english: string; slots: number; rarity?: number; combat?: number; gender?: number; confirmed: boolean };

@@ -15,6 +15,7 @@ type userView struct {
 	Nickname           string   `json:"nickname"`
 	Username           string   `json:"username"`
 	Email              *string  `json:"email"`
+	EmailVerified      bool     `json:"email_verified"`
 	Status             string   `json:"status"`
 	MustChangePassword bool     `json:"must_change_password"`
 	Roles              []string `json:"roles"`
@@ -23,7 +24,7 @@ type userView struct {
 }
 
 func (server *apiServer) users(writer http.ResponseWriter, request *http.Request) {
-	rows, err := server.pool.Query(request.Context(), `SELECT u.id,u.public_id,u.nickname,u.username,u.email,u.status,u.must_change_password,to_char(u.created_at,'YYYY-MM-DD"T"HH24:MI:SSOF'),CASE WHEN u.last_login_at IS NULL THEN NULL ELSE to_char(u.last_login_at,'YYYY-MM-DD"T"HH24:MI:SSOF') END,coalesce(array_agg(r.key) FILTER(WHERE r.key IS NOT NULL),'{}') FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 200`)
+	rows, err := server.pool.Query(request.Context(), `SELECT u.id,u.public_id,u.nickname,u.username,u.email,u.email_verified_at IS NOT NULL,u.status,u.must_change_password,to_char(u.created_at,'YYYY-MM-DD"T"HH24:MI:SSOF'),CASE WHEN u.last_login_at IS NULL THEN NULL ELSE to_char(u.last_login_at,'YYYY-MM-DD"T"HH24:MI:SSOF') END,coalesce(array_agg(r.key) FILTER(WHERE r.key IS NOT NULL),'{}') FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 200`)
 	if err != nil {
 		serverError(writer, request, err)
 		return
@@ -32,7 +33,7 @@ func (server *apiServer) users(writer http.ResponseWriter, request *http.Request
 	values := []userView{}
 	for rows.Next() {
 		var row userView
-		if err := rows.Scan(&row.ID, &row.PublicID, &row.Nickname, &row.Username, &row.Email, &row.Status, &row.MustChangePassword, &row.CreatedAt, &row.LastLoginAt, &row.Roles); err != nil {
+		if err := rows.Scan(&row.ID, &row.PublicID, &row.Nickname, &row.Username, &row.Email, &row.EmailVerified, &row.Status, &row.MustChangePassword, &row.CreatedAt, &row.LastLoginAt, &row.Roles); err != nil {
 			serverError(writer, request, err)
 			return
 		}
@@ -73,7 +74,7 @@ func (server *apiServer) createUser(writer http.ResponseWriter, request *http.Re
 			input.Email = &trimmed
 		}
 	}
-	password, err := auth.RandomSecret(24)
+	password, err := auth.RandomPassword(16)
 	if err != nil {
 		serverError(writer, request, err)
 		return
@@ -147,7 +148,7 @@ func (server *apiServer) updateUserStatus(writer http.ResponseWriter, request *h
 
 func (server *apiServer) resetUserPassword(writer http.ResponseWriter, request *http.Request) {
 	id := chiURL(request, "id")
-	password, err := auth.RandomSecret(24)
+	password, err := auth.RandomPassword(16)
 	if err != nil {
 		serverError(writer, request, err)
 		return

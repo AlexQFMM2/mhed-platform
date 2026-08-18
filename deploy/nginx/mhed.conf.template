@@ -2,6 +2,7 @@
 
 limit_req_zone $binary_remote_addr zone=mhed_api:10m rate=20r/s;
 limit_req_zone $binary_remote_addr zone=mhed_login:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=mhed_email:10m rate=3r/m;
 
 server {
     listen 80;
@@ -59,6 +60,15 @@ server {
         limit_req zone=mhed_login burst=5 nodelay;
         proxy_pass http://127.0.0.1:18100;
         include proxy_params;
+    }
+    location ~ ^/v1/desktop/(auth/(register|password-reset)/code|me/email/code)$ {
+        limit_req zone=mhed_email burst=3 nodelay;
+        proxy_pass http://127.0.0.1:18100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
     location / {
         limit_req zone=mhed_api burst=30 nodelay;

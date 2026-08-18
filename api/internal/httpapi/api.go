@@ -19,6 +19,7 @@ import (
 	"github.com/AlexQFMM2/mhed-platform/api/internal/auth"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/config"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/game/mh3g"
+	"github.com/AlexQFMM2/mhed-platform/api/internal/mailservice"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5"
@@ -26,7 +27,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const sessionCookie = "mhed_admin_session"
+const (
+	sessionCookie         = "mhed_admin_session"
+	passwordPolicyMessage = "密码须为 8～16 位，且包含英文字母、数字和特殊符号；支持的特殊符号：! @ # $ % ^ & * _ - + =。"
+)
 
 type apiServer struct {
 	logger      *slog.Logger
@@ -35,6 +39,7 @@ type apiServer struct {
 	gameError   error
 	requireGame bool
 	config      config.Config
+	mail        *mailservice.Service
 }
 type sessionUser struct {
 	ID                 string   `json:"id"`
@@ -70,6 +75,10 @@ func (server *apiServer) routes(router chi.Router) {
 	})
 	router.Route("/v1/desktop", func(r chi.Router) {
 		r.Post("/auth/login", server.desktopLogin)
+		r.Post("/auth/register/code", server.registerCode)
+		r.Post("/auth/register", server.registerDesktop)
+		r.Post("/auth/password-reset/code", server.resetPasswordCode)
+		r.Post("/auth/password-reset", server.resetPassword)
 		r.With(server.optionalDesktopAuthentication).Get("/loadouts", server.publicLoadouts)
 		r.With(server.optionalDesktopAuthentication).Get("/loadouts/{id}", server.publicLoadout)
 		r.Group(func(account chi.Router) {
@@ -80,6 +89,8 @@ func (server *apiServer) routes(router chi.Router) {
 			account.Group(func(ready chi.Router) {
 				ready.Use(requireDesktopReady)
 				ready.Patch("/me", server.updateDesktopProfile)
+				ready.Post("/me/email/code", server.bindEmailCode)
+				ready.Put("/me/email", server.bindEmail)
 				ready.Post("/loadouts", server.createDesktopLoadout)
 				ready.Get("/me/loadouts", server.desktopOwnLoadouts)
 				ready.Delete("/loadouts/{id}", server.deleteDesktopLoadout)
@@ -111,6 +122,11 @@ func (server *apiServer) routes(router chi.Router) {
 		r.Get("/reports", server.reports)
 		r.With(server.requireCSRF).Post("/reports/{id}/resolve", server.resolveReport)
 		r.Get("/audit-logs", server.auditLogs)
+		r.Get("/settings/email", server.emailSettings)
+		r.Get("/settings/email/deliveries", server.emailDeliveries)
+		r.With(server.requireCSRF).Put("/settings/email", server.updateEmailSettings)
+		r.With(server.requireCSRF).Post("/settings/email/check-balance", server.checkEmailBalance)
+		r.With(server.requireCSRF).Post("/settings/email/test", server.testEmail)
 		r.Get("/game-data/mh3g/equipment", server.gameEquipment)
 		r.Get("/game-data/mh3g/meta", server.gameMeta)
 		r.Get("/game-data/mh3g/decorations", server.gameDecorations)
@@ -307,7 +323,7 @@ func (server *apiServer) changePassword(writer http.ResponseWriter, request *htt
 	}
 	hash, err := auth.HashPassword(input.NewPassword)
 	if err != nil {
-		writeError(writer, request, http.StatusBadRequest, "VALIDATION_FAILED", "新密码必须为 12～128 字节。")
+		writeError(writer, request, http.StatusBadRequest, "VALIDATION_FAILED", passwordPolicyMessage)
 		return
 	}
 	tx, err := server.pool.Begin(request.Context())

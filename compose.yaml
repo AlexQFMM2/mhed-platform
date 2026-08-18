@@ -17,7 +17,7 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=64MB
+      - shared_buffers=128MB
       - -c
       - work_mem=4MB
       - -c
@@ -31,9 +31,9 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
-    cpus: 0.35
-    mem_limit: 384m
-    pids_limit: 128
+    cpus: 0.75
+    mem_limit: 640m
+    pids_limit: 192
     security_opt:
       - no-new-privileges:true
     logging: *default-logging
@@ -42,7 +42,7 @@ services:
 
   api:
     container_name: mhed-api
-    image: mhed-api:local
+    image: mhed-api:${MHED_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -50,7 +50,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       PORT: "8080"
-      GOMEMLIMIT: 192MiB
+      GOMEMLIMIT: 448MiB
       PGHOST: db
       PGPORT: "5432"
       PGDATABASE: ${POSTGRES_DB:-mhed}
@@ -62,6 +62,7 @@ services:
       MHED_ADMIN_ORIGIN: ${MHED_ADMIN_ORIGIN:-http://127.0.0.1:18102}
       MHED_COOKIE_SECURE: ${MHED_COOKIE_SECURE:-false}
       MHED_REPORT_HMAC_KEY: ${MHED_REPORT_HMAC_KEY:-development-only-report-key-change-me}
+      MHED_SECRET_ENCRYPTION_KEY: ${MHED_SECRET_ENCRYPTION_KEY:-bWhlZC1kZXZlbG9wbWVudC1lbWFpbC1rZXktdjEhISE}
     depends_on:
       db:
         condition: service_healthy
@@ -76,9 +77,9 @@ services:
       retries: 5
       start_period: 5s
     restart: unless-stopped
-    cpus: 0.50
-    mem_limit: 256m
-    pids_limit: 128
+    cpus: 1.25
+    mem_limit: 640m
+    pids_limit: 192
     read_only: true
     volumes:
       - mhed-game-data:/game-data:ro
@@ -93,7 +94,7 @@ services:
 
   migrate:
     container_name: mhed-migrate
-    image: mhed-api:local
+    image: mhed-api:${MHED_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -109,12 +110,13 @@ services:
       MHED_ADMIN_ORIGIN: ${MHED_ADMIN_ORIGIN:-http://127.0.0.1:18102}
       MHED_COOKIE_SECURE: ${MHED_COOKIE_SECURE:-false}
       MHED_REPORT_HMAC_KEY: ${MHED_REPORT_HMAC_KEY:-development-only-report-key-change-me}
+      MHED_SECRET_ENCRYPTION_KEY: ${MHED_SECRET_ENCRYPTION_KEY:-bWhlZC1kZXZlbG9wbWVudC1lbWFpbC1rZXktdjEhISE}
     depends_on:
       db:
         condition: service_healthy
     restart: "no"
-    cpus: 0.20
-    mem_limit: 128m
+    cpus: 0.30
+    mem_limit: 192m
     pids_limit: 64
     read_only: true
     tmpfs:
@@ -127,7 +129,7 @@ services:
 
   front:
     container_name: mhed-front
-    image: mhed-front:local
+    image: mhed-front:${MHED_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: deploy/front/Dockerfile
@@ -143,8 +145,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    cpus: 0.10
-    mem_limit: 64m
+    cpus: 0.20
+    mem_limit: 128m
     pids_limit: 64
     read_only: true
     tmpfs:
@@ -159,7 +161,7 @@ services:
 
   game-data-import:
     container_name: mhed-game-data-import
-    image: mhed-api:local
+    image: mhed-api:${MHED_IMAGE_TAG:-local}
     profiles: [ops]
     entrypoint: ["/mhedctl"]
     command: ["import-game-data", "--source", "/source/mh3g.sqlite", "--manifest", "/source/manifest.json", "--destination", "/game-data"]
@@ -168,8 +170,8 @@ services:
       - ./game-data/runtime:/source:ro
       - mhed-game-data:/game-data
     restart: "no"
-    cpus: 0.10
-    mem_limit: 32m
+    cpus: 0.20
+    mem_limit: 96m
     pids_limit: 32
     read_only: true
     security_opt:
@@ -202,8 +204,8 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-    cpus: 0.05
-    mem_limit: 64m
+    cpus: 0.10
+    mem_limit: 96m
     pids_limit: 32
     read_only: true
     tmpfs:

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -13,15 +14,18 @@ import (
 )
 
 const (
-	argonMemory  = 19 * 1024
-	argonTime    = 2
-	argonThreads = 1
-	argonKeyLen  = 32
+	argonMemory      = 19 * 1024
+	argonTime        = 2
+	argonThreads     = 1
+	argonKeyLen      = 32
+	passwordLetters  = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	passwordDigits   = "0123456789"
+	passwordSpecials = "!@#$%^&*_-+="
 )
 
 func HashPassword(password string) (string, error) {
-	if len(password) < 12 || len(password) > 128 {
-		return "", errors.New("password must contain 12 to 128 bytes")
+	if !ValidPassword(password) {
+		return "", errors.New("password must contain 8 to 16 ASCII characters including a letter, digit, and supported special character")
 	}
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
@@ -30,6 +34,69 @@ func HashPassword(password string) (string, error) {
 	hash := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
 	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s", argonMemory, argonTime,
 		argonThreads, base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(hash)), nil
+}
+
+// ValidPassword applies the policy for newly created or changed passwords.
+// VerifyPassword intentionally does not apply it so accounts using an older
+// password policy can still sign in and migrate normally.
+func ValidPassword(password string) bool {
+	if len(password) < 8 || len(password) > 16 {
+		return false
+	}
+	hasLetter, hasDigit, hasSpecial := false, false, false
+	for _, character := range password {
+		switch {
+		case strings.ContainsRune(passwordLetters, character):
+			hasLetter = true
+		case strings.ContainsRune(passwordDigits, character):
+			hasDigit = true
+		case strings.ContainsRune(passwordSpecials, character):
+			hasSpecial = true
+		default:
+			return false
+		}
+	}
+	return hasLetter && hasDigit && hasSpecial
+}
+
+func RandomPassword(length int) (string, error) {
+	if length < 8 || length > 16 {
+		return "", errors.New("password length must be between 8 and 16")
+	}
+	value := make([]byte, length)
+	groups := []string{passwordLetters, passwordDigits, passwordSpecials}
+	for index, group := range groups {
+		character, err := randomCharacter(group)
+		if err != nil {
+			return "", err
+		}
+		value[index] = character
+	}
+	all := passwordLetters + passwordDigits + passwordSpecials
+	for index := len(groups); index < len(value); index++ {
+		character, err := randomCharacter(all)
+		if err != nil {
+			return "", err
+		}
+		value[index] = character
+	}
+	for index := len(value) - 1; index > 0; index-- {
+		selected, err := rand.Int(rand.Reader, big.NewInt(int64(index+1)))
+		if err != nil {
+			return "", err
+		}
+		other := int(selected.Int64())
+		value[index], value[other] = value[other], value[index]
+	}
+	return string(value), nil
+}
+
+func randomCharacter(characters string) (byte, error) {
+	index, err := rand.Int(rand.Reader, big.NewInt(int64(len(characters))))
+	if err != nil {
+		return 0, err
+	}
+	return characters[index.Int64()], nil
 }
 
 func VerifyPassword(encoded, password string) bool {

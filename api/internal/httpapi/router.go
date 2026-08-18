@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlexQFMM2/mhed-platform/api/internal/config"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/game/mh3g"
+	"github.com/AlexQFMM2/mhed-platform/api/internal/mailservice"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,6 +26,9 @@ func WithConfig(value config.Config) RouterOption {
 }
 func WithGameData(value *mh3g.Adapter, openError error) RouterOption {
 	return func(server *apiServer) { server.game = value; server.gameError = openError; server.requireGame = true }
+}
+func WithMailService(value *mailservice.Service) RouterOption {
+	return func(server *apiServer) { server.mail = value }
 }
 
 func NewRouter(logger *slog.Logger, database databasePinger, options ...RouterOption) http.Handler {

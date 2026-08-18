@@ -12,17 +12,25 @@ import (
 )
 
 type desktopProfile struct {
-	PublicID           int64  `json:"public_id"`
-	Nickname           string `json:"nickname"`
-	MustChangePassword bool   `json:"must_change_password"`
+	PublicID           int64   `json:"public_id"`
+	Nickname           string  `json:"nickname"`
+	Email              *string `json:"email"`
+	EmailVerified      bool    `json:"email_verified"`
+	ReceivedLikeCount  int64   `json:"received_like_count"`
+	MustChangePassword bool    `json:"must_change_password"`
 }
 
-func profileFor(user sessionUser) desktopProfile {
-	return desktopProfile{PublicID: user.PublicID, Nickname: user.Nickname, MustChangePassword: user.MustChangePassword}
+func (server *apiServer) profileFor(ctx context.Context, user sessionUser) (desktopProfile, error) {
+	value := desktopProfile{PublicID: user.PublicID, Nickname: user.Nickname, MustChangePassword: user.MustChangePassword}
+	err := server.pool.QueryRow(ctx, `SELECT email,email_verified_at IS NOT NULL,
+		(SELECT count(*) FROM loadout_likes likes JOIN loadouts l ON l.id=likes.loadout_id WHERE l.owner_user_id=u.id AND l.status='published')
+		FROM users u WHERE u.id=$1`, user.ID).Scan(&value.Email, &value.EmailVerified, &value.ReceivedLikeCount)
+	return value, err
 }
 
 func (server *apiServer) desktopLogin(writer http.ResponseWriter, request *http.Request) {
 	var input struct {
+		Account  string `json:"account"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
@@ -31,7 +39,12 @@ func (server *apiServer) desktopLogin(writer http.ResponseWriter, request *http.
 	}
 	var user sessionUser
 	var passwordHash string
-	err := server.pool.QueryRow(request.Context(), `SELECT id,public_id,nickname,username,password_hash,status,must_change_password FROM users WHERE lower(username)=lower($1)`, strings.TrimSpace(input.Username)).Scan(&user.ID, &user.PublicID, &user.Nickname, &user.Username, &passwordHash, &user.Status, &user.MustChangePassword)
+	account := strings.TrimSpace(input.Account)
+	if account == "" {
+		account = strings.TrimSpace(input.Username)
+	}
+	err := server.pool.QueryRow(request.Context(), `SELECT id,public_id,nickname,username,password_hash,status,must_change_password FROM users
+		WHERE lower(username)=lower($1) OR (email_verified_at IS NOT NULL AND lower(email)=lower($1))`, account).Scan(&user.ID, &user.PublicID, &user.Nickname, &user.Username, &passwordHash, &user.Status, &user.MustChangePassword)
 	if err != nil || user.Status != "active" || !auth.VerifyPassword(passwordHash, input.Password) {
 		writeError(writer, request, http.StatusUnauthorized, "INVALID_CREDENTIALS", "用户名或密码错误。")
 		return
@@ -53,7 +66,12 @@ func (server *apiServer) desktopLogin(writer http.ResponseWriter, request *http.
 		return
 	}
 	_, _ = server.pool.Exec(request.Context(), `UPDATE users SET last_login_at=now(),updated_at=now() WHERE id=$1`, user.ID)
-	writeJSON(writer, http.StatusOK, map[string]any{"access_token": token, "expires_at": absolute.UTC().Format(time.RFC3339), "user": profileFor(user)})
+	profile, err := server.profileFor(request.Context(), user)
+	if err != nil {
+		serverError(writer, request, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"access_token": token, "expires_at": absolute.UTC().Format(time.RFC3339), "user": profile})
 }
 
 func bearerToken(request *http.Request) string {
@@ -118,7 +136,12 @@ func requireDesktopReady(next http.Handler) http.Handler {
 }
 
 func (server *apiServer) desktopMe(writer http.ResponseWriter, request *http.Request) {
-	writeJSON(writer, http.StatusOK, map[string]any{"user": profileFor(currentUser(request))})
+	profile, err := server.profileFor(request.Context(), currentUser(request))
+	if err != nil {
+		serverError(writer, request, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"user": profile})
 }
 
 func validNickname(value string) bool {
@@ -152,7 +175,12 @@ func (server *apiServer) updateDesktopProfile(writer http.ResponseWriter, reques
 		return
 	}
 	user.Nickname = input.Nickname
-	writeJSON(writer, http.StatusOK, map[string]any{"user": profileFor(user)})
+	profile, err := server.profileFor(request.Context(), user)
+	if err != nil {
+		serverError(writer, request, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"user": profile})
 }
 
 func (server *apiServer) desktopLogout(writer http.ResponseWriter, request *http.Request) {
@@ -180,7 +208,7 @@ func (server *apiServer) desktopChangePassword(writer http.ResponseWriter, reque
 	}
 	hash, err := auth.HashPassword(input.NewPassword)
 	if err != nil {
-		writeError(writer, request, http.StatusBadRequest, "VALIDATION_FAILED", "新密码必须为 12～128 字节。")
+		writeError(writer, request, http.StatusBadRequest, "VALIDATION_FAILED", passwordPolicyMessage)
 		return
 	}
 	tx, err := server.pool.Begin(request.Context())

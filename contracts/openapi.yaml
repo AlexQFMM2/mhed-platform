@@ -41,6 +41,9 @@ paths:
       operationId: changePassword
       security: [cookieSession: []]
       parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ChangePasswordInput" } } }
       responses: { "200": { description: Password changed and sessions revoked }, "400": { $ref: "#/components/responses/Error" } }
   /v1/auth/logout:
     post:
@@ -67,11 +70,37 @@ paths:
   /v1/desktop/auth/login:
     post:
       operationId: desktopLogin
-      responses: { "200": { description: Opaque desktop access token and public profile }, "401": { $ref: "#/components/responses/Error" } }
+      description: Accepts an account field containing a username or verified email; legacy username is also accepted.
+      responses: { "200": { description: Opaque desktop access token and private profile }, "401": { $ref: "#/components/responses/Error" } }
+  /v1/desktop/auth/register/code:
+    post:
+      operationId: sendDesktopRegistrationCode
+      responses: { "202": { description: Verification email queued }, "409": { $ref: "#/components/responses/Error" }, "429": { $ref: "#/components/responses/Error" } }
+  /v1/desktop/auth/register:
+    post:
+      operationId: registerDesktopAccount
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegisterInput" } } }
+      responses: { "201": { description: Account created and desktop session issued }, "400": { $ref: "#/components/responses/Error" } }
+  /v1/desktop/auth/password-reset/code:
+    post:
+      operationId: sendDesktopPasswordResetCode
+      responses: { "202": { description: Generic response regardless of account existence or per-account delivery state } }
+  /v1/desktop/auth/password-reset:
+    post:
+      operationId: resetDesktopPassword
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ResetPasswordInput" } } }
+      responses: { "200": { description: Password reset and all sessions revoked }, "400": { $ref: "#/components/responses/Error" } }
   /v1/desktop/auth/change-password:
     post:
       operationId: desktopChangePassword
       security: [desktopBearer: []]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ChangePasswordInput" } } }
       responses: { "200": { description: Password changed and all sessions revoked } }
   /v1/desktop/auth/logout:
     post:
@@ -82,11 +111,21 @@ paths:
     get:
       operationId: getDesktopProfile
       security: [desktopBearer: []]
-      responses: { "200": { description: Public ID, nickname, and password-change state; login username is not returned } }
+      responses: { "200": { description: Public ID, nickname, verified email state, received likes, and password-change state; login username is not returned } }
     patch:
       operationId: updateDesktopProfile
       security: [desktopBearer: []]
       responses: { "200": { description: Nickname updated } }
+  /v1/desktop/me/email/code:
+    post:
+      operationId: sendDesktopEmailBindingCode
+      security: [desktopBearer: []]
+      responses: { "202": { description: Email verification queued }, "409": { $ref: "#/components/responses/Error" }, "429": { $ref: "#/components/responses/Error" } }
+  /v1/desktop/me/email:
+    put:
+      operationId: bindDesktopEmail
+      security: [desktopBearer: []]
+      responses: { "200": { description: Email verified and all sessions revoked }, "400": { $ref: "#/components/responses/Error" } }
   /v1/desktop/me/loadouts:
     get:
       operationId: listOwnDesktopLoadouts
@@ -121,6 +160,34 @@ paths:
       operationId: getAdminDashboard
       security: [cookieSession: []]
       responses: { "200": { description: Administration counters }, "403": { $ref: "#/components/responses/Error" } }
+  /v1/admin/settings/email:
+    get:
+      operationId: getAdminEmailSettings
+      security: [cookieSession: []]
+      responses: { "200": { description: Masked AOKSend settings and documentation links } }
+    put:
+      operationId: updateAdminEmailSettings
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "200": { description: Settings saved without returning the API key } }
+  /v1/admin/settings/email/check-balance:
+    post:
+      operationId: checkAdminEmailBalance
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "200": { description: AOKSend account balance } }
+  /v1/admin/settings/email/deliveries:
+    get:
+      operationId: listAdminEmailDeliveries
+      description: Lists the latest 100 delivery metadata records without verification codes or template bodies.
+      security: [cookieSession: []]
+      responses: { "200": { description: Recent verification and test email delivery records } }
+  /v1/admin/settings/email/test:
+    post:
+      operationId: sendAdminTestEmail
+      security: [cookieSession: []]
+      parameters: [{ $ref: "#/components/parameters/CSRFToken" }]
+      responses: { "200": { description: Test email accepted by AOKSend } }
   /v1/admin/users:
     get:
       operationId: listUsers
@@ -278,7 +345,36 @@ components:
       required: [username, password]
       properties:
         username: { type: string, pattern: "^[A-Za-z0-9_]{3,32}$" }
-        password: { type: string, minLength: 12, maxLength: 128 }
+        password: { type: string, minLength: 1, maxLength: 128, description: Existing passwords created under an earlier policy remain valid for login. }
+    NewPassword:
+      type: string
+      minLength: 8
+      maxLength: 16
+      pattern: '^(?=.*[A-Za-z])(?=.*[0-9])(?=.*[!@#$%^&*_+=-])[A-Za-z0-9!@#$%^&*_+=-]{8,16}$'
+      description: Must include an ASCII letter, digit, and one of ! @ # $ % ^ & * _ - + =.
+    ChangePasswordInput:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, minLength: 1, maxLength: 128 }
+        new_password: { $ref: "#/components/schemas/NewPassword" }
+    RegisterInput:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code, password]
+      properties:
+        challenge_id: { type: string, format: uuid }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+        password: { $ref: "#/components/schemas/NewPassword" }
+    ResetPasswordInput:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, code, new_password]
+      properties:
+        challenge_id: { type: string, format: uuid }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+        new_password: { $ref: "#/components/schemas/NewPassword" }
     ErrorEnvelope:
       type: object
       required: [error]

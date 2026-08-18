@@ -14,6 +14,7 @@ import (
 	"github.com/AlexQFMM2/mhed-platform/api/internal/database"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/game/mh3g"
 	"github.com/AlexQFMM2/mhed-platform/api/internal/httpapi"
+	"github.com/AlexQFMM2/mhed-platform/api/internal/mailservice"
 )
 
 func main() {
@@ -43,6 +44,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	mailService, err := mailservice.New(pool, logger, cfg.SecretEncryptionKey)
+	if err != nil {
+		logger.Error("mail service initialization failed", "error", err)
+		os.Exit(1)
+	}
+	go mailService.Run(ctx)
 	gameData, gameDataError := mh3g.Open(cfg.GameDataPath, cfg.GameManifestPath)
 	if gameDataError != nil {
 		logger.Error("MH3G game data unavailable", "error", gameDataError)
@@ -52,7 +59,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(logger, pool, httpapi.WithConfig(cfg), httpapi.WithGameData(gameData, gameDataError)),
+		Handler:           httpapi.NewRouter(logger, pool, httpapi.WithConfig(cfg), httpapi.WithGameData(gameData, gameDataError), httpapi.WithMailService(mailService)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

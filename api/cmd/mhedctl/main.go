@@ -62,7 +62,7 @@ func createLocalUser(arguments []string) {
 		fmt.Fprintf(os.Stdout, "local user %s already exists; credentials unchanged\n", *username)
 		return
 	}
-	password, err := auth.RandomSecret(24)
+	password, err := auth.RandomPassword(16)
 	if err != nil {
 		fatal("generate password: " + err.Error())
 	}
@@ -156,7 +156,7 @@ func bootstrap(arguments []string) {
 		fmt.Fprintf(os.Stdout, "super administrator %s already exists; credentials unchanged\n", *username)
 		return
 	}
-	password, err := auth.RandomSecret(24)
+	password, err := auth.RandomPassword(16)
 	if err != nil {
 		fatal("generate password: " + err.Error())
 	}
